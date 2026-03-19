@@ -26,16 +26,16 @@ TARGET_DIR=""
 # --- Usage ---
 usage() {
   cat <<EOF
-blatt v${VERSION} — PDF-Statistiken für ein Verzeichnis
+blatt v${VERSION} — PDF statistics for a directory
 
-Verwendung: blatt [-v] [-r] [-h] <Verzeichnis>
+Usage: blatt [-v] [-r] [-h] <directory>
 
-Optionen:
-  -v    Detailansicht (Tabelle mit Einzeldateien)
-  -r    Rekursiv (Unterverzeichnisse einbeziehen)
-  -h    Diese Hilfe anzeigen
+Options:
+  -v    Verbose (table with per-file breakdown)
+  -r    Recursive (include subdirectories)
+  -h    Show this help
 
-Beispiele:
+Examples:
   blatt ~/Documents
   blatt -v ~/Documents
   blatt -rv ~/Documents
@@ -52,15 +52,15 @@ while [[ $# -gt 0 ]]; do
     -r) RECURSIVE=true; shift ;;
     -rv|-vr) VERBOSE=true; RECURSIVE=true; shift ;;
     -*)
-      echo "Unbekannte Option: $1" >&2
-      echo "Verwende 'blatt -h' für Hilfe." >&2
+      echo "Unknown option: $1" >&2
+      echo "Use 'blatt -h' for help." >&2
       exit 1
       ;;
     *)
       if [[ -z "$TARGET_DIR" ]]; then
         TARGET_DIR="$1"
       else
-        echo "Fehler: Nur ein Verzeichnis angeben." >&2
+        echo "Error: Only one directory allowed." >&2
         exit 1
       fi
       shift
@@ -69,13 +69,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$TARGET_DIR" ]]; then
-  echo "Fehler: Kein Verzeichnis angegeben." >&2
-  echo "Verwende 'blatt -h' für Hilfe." >&2
+  echo "Error: No directory specified." >&2
+  echo "Use 'blatt -h' for help." >&2
   exit 1
 fi
 
 if [[ ! -d "$TARGET_DIR" ]]; then
-  echo "Fehler: '${TARGET_DIR}' ist kein Verzeichnis." >&2
+  echo "Error: '${TARGET_DIR}' is not a directory." >&2
   exit 1
 fi
 
@@ -92,7 +92,7 @@ while IFS= read -r -d '' file; do
 done < <(find "${FIND_ARGS[@]}" -print0 2>/dev/null | sort -z)
 
 if [[ ${#pdf_files[@]} -eq 0 ]]; then
-  echo "Keine PDF-Dateien gefunden in '${TARGET_DIR}'."
+  echo "No PDF files found in '${TARGET_DIR}'."
   exit 0
 fi
 
@@ -151,7 +151,7 @@ if [[ "$VERBOSE" == true ]]; then
   (( max_name > 60 )) && max_name=60
 
   # Header
-  printf "${C_BOLD}%-${max_name}s  %8s  %10s${C_RESET}\n" "Name" "Seiten" "Größe"
+  printf "${C_BOLD}%-${max_name}s  %8s  %10s${C_RESET}\n" "Name" "Pages" "Size"
   printf "${C_DIM}"
   printf '%.0s─' $(seq 1 $((max_name + 22)))
   printf "${C_RESET}\n"
@@ -175,5 +175,5 @@ fi
 
 # --- Summary ---
 total_size_str=$(format_size "$total_bytes")
-printf "${C_CYAN}%d${C_RESET} Seiten in ${C_YELLOW}%d${C_RESET} Dokumenten, Gesamtgröße ${C_GREEN}%s${C_RESET}\n" \
+printf "${C_CYAN}%d${C_RESET} pages in ${C_YELLOW}%d${C_RESET} documents, total size ${C_GREEN}%s${C_RESET}\n" \
   "$total_pages" "$doc_count" "$total_size_str"

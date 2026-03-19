@@ -56,7 +56,7 @@ echo "Verbose mode (-v):"
 output=$("$BLATT" -v "$FIXTURES" 2>&1)
 assert_contains "shows one-page.pdf" "$output" "one-page.pdf"
 assert_contains "shows three-pages.pdf" "$output" "three-pages.pdf"
-assert_contains "shows header" "$output" "Name"
+assert_contains "shows header" "$output" "Pages"
 
 # --- Recursive mode ---
 echo "Recursive mode (-r):"
