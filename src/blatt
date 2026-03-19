@@ -21,6 +21,8 @@ fi
 # --- Defaults ---
 VERBOSE=false
 RECURSIVE=false
+JSON=false
+SORT_BY=""
 TARGET_DIR=""
 
 # --- Usage ---
@@ -28,17 +30,21 @@ usage() {
   cat <<EOF
 blatt v${VERSION} — PDF statistics for a directory
 
-Usage: blatt [-v] [-r] [-h] <directory>
+Usage: blatt [-v] [-r] [--json] [--sort KEY] [-h] <directory>
 
 Options:
-  -v    Verbose (table with per-file breakdown)
-  -r    Recursive (include subdirectories)
-  -h    Show this help
+  -v              Verbose (table with per-file breakdown)
+  -r              Recursive (include subdirectories)
+  --json          Output as JSON
+  --sort KEY      Sort verbose output by: name, pages, size (default: name)
+  -h              Show this help
 
 Examples:
   blatt ~/Documents
   blatt -v ~/Documents
   blatt -rv ~/Documents
+  blatt --json ~/Documents
+  blatt -v --sort pages ~/Documents
 EOF
   exit 0
 }
@@ -51,6 +57,19 @@ while [[ $# -gt 0 ]]; do
     -v) VERBOSE=true; shift ;;
     -r) RECURSIVE=true; shift ;;
     -rv|-vr) VERBOSE=true; RECURSIVE=true; shift ;;
+    --json) JSON=true; shift ;;
+    --sort)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --sort requires a value (name, pages, size)." >&2
+        exit 1
+      fi
+      SORT_BY="$2"
+      if [[ "$SORT_BY" != "name" && "$SORT_BY" != "pages" && "$SORT_BY" != "size" ]]; then
+        echo "Error: --sort must be one of: name, pages, size." >&2
+        exit 1
+      fi
+      shift 2
+      ;;
     -*)
       echo "Unknown option: $1" >&2
       echo "Use 'blatt -h' for help." >&2
@@ -118,7 +137,7 @@ for file in "${pdf_files[@]}"; do
   total_bytes=$((total_bytes + bytes))
   doc_count=$((doc_count + 1))
 
-  if [[ "$VERBOSE" == true ]]; then
+  if [[ "$VERBOSE" == true || "$JSON" == true ]]; then
     file_names+=( "$file" )
     file_pages+=( "$pages" )
     file_sizes+=( "$bytes" )
@@ -138,6 +157,70 @@ format_size() {
     echo "${bytes} B"
   fi
 }
+
+# --- Sort (applies to verbose and JSON) ---
+if [[ -n "$SORT_BY" && ${#file_names[@]} -gt 0 ]]; then
+  # Build sortable lines: "sort_key|index" then reorder arrays
+  sorted_indices=()
+  case "$SORT_BY" in
+    name)
+      while IFS= read -r line; do
+        sorted_indices+=( "${line##*|}" )
+      done < <(
+        for i in "${!file_names[@]}"; do
+          echo "$(basename "${file_names[$i]}")|$i"
+        done | sort -f -t'|' -k1,1
+      )
+      ;;
+    pages)
+      while IFS= read -r line; do
+        sorted_indices+=( "${line##*|}" )
+      done < <(
+        for i in "${!file_names[@]}"; do
+          echo "${file_pages[$i]}|$i"
+        done | sort -t'|' -k1,1 -n -r
+      )
+      ;;
+    size)
+      while IFS= read -r line; do
+        sorted_indices+=( "${line##*|}" )
+      done < <(
+        for i in "${!file_names[@]}"; do
+          echo "${file_sizes[$i]}|$i"
+        done | sort -t'|' -k1,1 -n -r
+      )
+      ;;
+  esac
+
+  new_names=() new_pages=() new_sizes=()
+  for i in "${sorted_indices[@]}"; do
+    new_names+=( "${file_names[$i]}" )
+    new_pages+=( "${file_pages[$i]}" )
+    new_sizes+=( "${file_sizes[$i]}" )
+  done
+  file_names=( "${new_names[@]}" )
+  file_pages=( "${new_pages[@]}" )
+  file_sizes=( "${new_sizes[@]}" )
+fi
+
+# --- JSON output ---
+if [[ "$JSON" == true ]]; then
+  echo "{"
+  echo "  \"directory\": \"${TARGET_DIR}\","
+  echo "  \"recursive\": ${RECURSIVE},"
+  echo "  \"total_pages\": ${total_pages},"
+  echo "  \"total_documents\": ${doc_count},"
+  echo "  \"total_bytes\": ${total_bytes},"
+  echo "  \"files\": ["
+  for i in "${!file_names[@]}"; do
+    comma=","
+    [[ $i -eq $(( ${#file_names[@]} - 1 )) ]] && comma=""
+    echo "    {\"name\": \"$(basename "${file_names[$i]}")\", \"path\": \"${file_names[$i]}\", \"pages\": ${file_pages[$i]}, \"bytes\": ${file_sizes[$i]}}${comma}"
+  done
+  echo "  ]"
+  echo "}"
+  exit 0
+fi
 
 # --- Verbose table output ---
 if [[ "$VERBOSE" == true ]]; then

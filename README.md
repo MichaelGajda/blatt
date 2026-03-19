@@ -45,7 +45,7 @@ macOS only — uses Spotlight metadata (`mdls`) for fast, reliable page counts w
 
 ### Installing
 
-**Homebrew** (coming soon):
+**Homebrew**:
 
 ```bash
 brew tap michaelgajda/blatt
@@ -69,10 +69,12 @@ blatt --version
 ## Usage
 
 ```bash
-blatt ~/Documents              # Summary: pages, docs, size
-blatt -v ~/Documents           # Verbose: table with per-file breakdown
-blatt -r ~/Documents           # Recursive: include subdirectories
-blatt -rv ~/Documents          # Both
+blatt ~/Documents                       # Summary: pages, docs, size
+blatt -v ~/Documents                    # Verbose: table with per-file breakdown
+blatt -r ~/Documents                    # Recursive: include subdirectories
+blatt -rv ~/Documents                   # Both
+blatt -v --sort pages ~/Documents       # Sort by pages (or: name, size)
+blatt --json ~/Documents                # JSON output for scripting
 ```
 
 **Summary output:**
@@ -91,6 +93,33 @@ handbook.pdf                    186   12.4 MB
 invoice-march.pdf                 2   104.3 KB
 ──────────────────────────────────────────────
 230 pages in 3 documents, total size 15.6 MB
+```
+
+**Sorted output (`-v --sort pages`):**
+
+Sort the verbose table by `name`, `pages`, or `size` (descending for pages/size).
+
+**JSON output (`--json`):**
+
+```json
+{
+  "directory": "~/Documents",
+  "recursive": false,
+  "total_pages": 230,
+  "total_documents": 3,
+  "total_bytes": 16357376,
+  "files": [
+    {"name": "report-q1.pdf", "path": "...", "pages": 42, "bytes": 3250585},
+    {"name": "handbook.pdf", "path": "...", "pages": 186, "bytes": 13002342},
+    {"name": "invoice-march.pdf", "path": "...", "pages": 2, "bytes": 104449}
+  ]
+}
+```
+
+Pipe it into `jq` for quick queries:
+
+```bash
+blatt --json ~/Documents | jq '.files[] | select(.pages > 10)'
 ```
 
 ## Running the Tests

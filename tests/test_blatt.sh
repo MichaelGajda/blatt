@@ -86,6 +86,50 @@ assert_exit_code "no args exits 1" 1 "$BLATT"
 assert_exit_code "invalid dir exits 1" 1 "$BLATT" "/nonexistent/path"
 assert_exit_code "unknown flag exits 1" 1 "$BLATT" "-z"
 
+# --- JSON mode ---
+echo "JSON mode (--json):"
+output=$("$BLATT" --json "$FIXTURES" 2>&1)
+assert_contains "json has total_pages" "$output" '"total_pages": 4'
+assert_contains "json has total_documents" "$output" '"total_documents": 2'
+assert_contains "json has files array" "$output" '"files":'
+assert_contains "json lists one-page.pdf" "$output" '"name": "one-page.pdf"'
+
+echo "JSON recursive (--json -r):"
+output=$("$BLATT" --json -r "$FIXTURES" 2>&1)
+assert_contains "json recursive total_pages 9" "$output" '"total_pages": 9'
+assert_contains "json recursive total_documents 3" "$output" '"total_documents": 3'
+
+# --- Sort mode ---
+echo "Sort by name (-v --sort name):"
+output=$("$BLATT" -v --sort name "$FIXTURES" 2>&1 | strip_ansi)
+# one-page.pdf should come before three-pages.pdf alphabetically
+one_line=$(echo "$output" | grep -n "one-page.pdf" | head -1 | cut -d: -f1)
+three_line=$(echo "$output" | grep -n "three-pages.pdf" | head -1 | cut -d: -f1)
+if [[ -n "$one_line" && -n "$three_line" && "$one_line" -lt "$three_line" ]]; then
+  echo "  PASS: one-page.pdf before three-pages.pdf"
+  ((passed++))
+else
+  echo "  FAIL: sort by name order"
+  ((failed++))
+fi
+
+echo "Sort by pages (-v --sort pages):"
+output=$("$BLATT" -v --sort pages "$FIXTURES" 2>&1 | strip_ansi)
+# three-pages (3) should come before one-page (1) in descending order
+three_line=$(echo "$output" | grep -n "three-pages.pdf" | head -1 | cut -d: -f1)
+one_line=$(echo "$output" | grep -n "one-page.pdf" | head -1 | cut -d: -f1)
+if [[ -n "$three_line" && -n "$one_line" && "$three_line" -lt "$one_line" ]]; then
+  echo "  PASS: three-pages.pdf before one-page.pdf (descending)"
+  ((passed++))
+else
+  echo "  FAIL: sort by pages order"
+  ((failed++))
+fi
+
+echo "Sort error cases:"
+assert_exit_code "--sort with invalid key exits 1" 1 "$BLATT" --sort bogus "$FIXTURES"
+assert_exit_code "--sort without value exits 1" 1 "$BLATT" --sort
+
 # --- No PDFs ---
 echo "Empty directory:"
 tmpdir=$(mktemp -d)
