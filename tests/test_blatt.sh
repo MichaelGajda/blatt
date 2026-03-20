@@ -53,10 +53,11 @@ assert_contains "document count is 3" "$output" " 3 "
 
 # --- Verbose mode ---
 echo "Verbose mode (-v):"
-output=$("$BLATT" -v "$FIXTURES" 2>&1)
+output=$("$BLATT" -v "$FIXTURES" 2>&1 | strip_ansi)
 assert_contains "shows one-page.pdf" "$output" "one-page.pdf"
 assert_contains "shows three-pages.pdf" "$output" "three-pages.pdf"
 assert_contains "shows header" "$output" "Pages"
+assert_contains "shows totals row" "$output" "3 docs"
 
 # --- Recursive mode ---
 echo "Recursive mode (-r):"
@@ -66,9 +67,9 @@ assert_contains "document count is 4" "$output" " 4 "
 
 # --- Combined -rv ---
 echo "Combined mode (-rv):"
-output=$("$BLATT" -rv "$FIXTURES" 2>&1)
+output=$("$BLATT" -rv "$FIXTURES" 2>&1 | strip_ansi)
 assert_contains "shows subdir file" "$output" "five-pages.pdf"
-assert_contains "total pages 9" "$output" "^9 "
+assert_contains "totals row shows 9 pages" "$output" "4 docs.*9"
 
 # --- Help ---
 echo "Help flag:"
@@ -142,8 +143,8 @@ else
   echo "  PASS: top 1 hides other files"
   ((passed++))
 fi
-# Summary should still show full totals
-assert_contains "top N keeps full total in summary" "$output" "^4 "
+# Totals row should still show full totals
+assert_contains "top N keeps full total in totals row" "$output" "3 docs.*4"
 
 echo "Top N with JSON (--json --top 1):"
 output=$("$BLATT" --json --sort pages --top 1 "$FIXTURES" 2>&1)
@@ -162,6 +163,15 @@ echo "Top N error cases:"
 assert_exit_code "--top without value exits 1" 1 "$BLATT" --top
 assert_exit_code "--top 0 exits 1" 1 "$BLATT" --top 0 "$FIXTURES"
 assert_exit_code "--top abc exits 1" 1 "$BLATT" --top abc "$FIXTURES"
+
+# --- Box mode ---
+echo "Box mode (--box):"
+output=$("$BLATT" --box "$FIXTURES" 2>&1 | strip_ansi)
+assert_contains "box has top border" "$output" "┌─"
+assert_contains "box has bottom border" "$output" "└─"
+assert_contains "box has column separators" "$output" "│"
+assert_contains "box shows files (implies -v)" "$output" "one-page.pdf"
+assert_contains "box shows totals row" "$output" "3 docs"
 
 # --- Unreadable PDF warnings ---
 echo "Unreadable PDF warnings:"

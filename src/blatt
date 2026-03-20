@@ -25,6 +25,7 @@ RECURSIVE=false
 JSON=false
 SORT_BY=""
 TOP_N=0
+BOX=false
 TARGET_DIR=""
 
 # --- Usage ---
@@ -32,7 +33,7 @@ usage() {
   cat <<EOF
 blatt v${VERSION} — PDF statistics for a directory
 
-Usage: blatt [-v] [-r] [--json] [--sort KEY] [--top N] [-h] <directory>
+Usage: blatt [-v] [-r] [--json] [--sort KEY] [--top N] [--box] [-h] <directory>
 
 Options:
   -v              Verbose (table with per-file breakdown)
@@ -40,6 +41,7 @@ Options:
   --json          Output as JSON
   --sort KEY      Sort verbose output by: name, pages, size (default: name)
   --top N         Show only the top N files (use with -v or --json)
+  --box           Box-drawing table style (use with -v)
   -h              Show this help
 
 Examples:
@@ -49,6 +51,7 @@ Examples:
   blatt --json ~/Documents
   blatt -v --sort pages ~/Documents
   blatt -v --sort size --top 5 ~/Documents
+  blatt -v --box ~/Documents
 EOF
   exit 0
 }
@@ -86,6 +89,7 @@ while [[ $# -gt 0 ]]; do
       TOP_N="$2"
       shift 2
       ;;
+    --box) BOX=true; VERBOSE=true; shift ;;
     -*)
       echo "Unknown option: $1" >&2
       echo "Use 'blatt -h' for help." >&2
@@ -256,7 +260,7 @@ fi
 # --- Verbose table output ---
 if [[ "$VERBOSE" == true ]]; then
   # Calculate column widths
-  max_name=4  # "Name"
+  max_name=5  # "Total"
   for file in "${file_names[@]}"; do
     name=$(basename "$file")
     (( ${#name} > max_name )) && max_name=${#name}
@@ -264,43 +268,70 @@ if [[ "$VERBOSE" == true ]]; then
   # Cap name width
   (( max_name > 60 )) && max_name=60
 
-  # Header
-  printf "${C_BOLD}%-${max_name}s  %8s  %10s${C_RESET}\n" "Name" "Pages" "Size"
-  printf "${C_DIM}"
-  printf '%.0s─' $(seq 1 $((max_name + 22)))
-  printf "${C_RESET}\n"
+  col_w=$((max_name + 8 + 10 + 4))  # name + pages + size + spacing
+  total_size_str=$(format_size "$total_bytes")
 
-  # Rows
-  for i in "${!file_names[@]}"; do
-    name=$(basename "${file_names[$i]}")
-    # Truncate long names
-    if (( ${#name} > max_name )); then
-      name="${name:0:$((max_name - 1))}…"
-    fi
-    size_str=$(format_size "${file_sizes[$i]}")
-    # Mark unreadable files
-    page_display="${file_pages[$i]}"
-    row_color=""
-    for u in "${unreadable_files[@]+"${unreadable_files[@]}"}"; do
-      if [[ "$u" == "${file_names[$i]}" ]]; then
-        page_display="?"
-        row_color="${C_DIM}"
-        break
+  if [[ "$BOX" == true ]]; then
+    # Box-drawing style
+    printf "┌─"; printf '%.0s─' $(seq 1 $max_name); printf "─┬─"; printf '%.0s─' $(seq 1 8); printf "─┬─"; printf '%.0s─' $(seq 1 10); printf "─┐\n"
+    printf "│ ${C_BOLD}%-${max_name}s${C_RESET} │ ${C_BOLD}%8s${C_RESET} │ ${C_BOLD}%10s${C_RESET} │\n" "Name" "Pages" "Size"
+    printf "├─"; printf '%.0s─' $(seq 1 $max_name); printf "─┼─"; printf '%.0s─' $(seq 1 8); printf "─┼─"; printf '%.0s─' $(seq 1 10); printf "─┤\n"
+
+    for i in "${!file_names[@]}"; do
+      name=$(basename "${file_names[$i]}")
+      if (( ${#name} > max_name )); then
+        name="${name:0:$((max_name - 1))}…"
       fi
+      size_str=$(format_size "${file_sizes[$i]}")
+      page_display="${file_pages[$i]}"
+      row_color=""
+      for u in "${unreadable_files[@]+"${unreadable_files[@]}"}"; do
+        if [[ "$u" == "${file_names[$i]}" ]]; then
+          page_display="?"
+          row_color="${C_DIM}"
+          break
+        fi
+      done
+      printf "│ ${row_color}%-${max_name}s${C_RESET} │ ${row_color}%8s${C_RESET} │ ${row_color}%10s${C_RESET} │\n" "$name" "$page_display" "$size_str"
     done
-    printf "${row_color}%-${max_name}s  %8s  %10s${C_RESET}\n" "$name" "$page_display" "$size_str"
-  done
 
-  # Separator
-  printf "${C_DIM}"
-  printf '%.0s─' $(seq 1 $((max_name + 22)))
-  printf "${C_RESET}\n"
+    printf "├─"; printf '%.0s─' $(seq 1 $max_name); printf "─┼─"; printf '%.0s─' $(seq 1 8); printf "─┼─"; printf '%.0s─' $(seq 1 10); printf "─┤\n"
+    printf "│ ${C_BOLD}%-${max_name}s${C_RESET} │ ${C_CYAN}%8d${C_RESET} │ ${C_GREEN}%10s${C_RESET} │\n" "${doc_count} docs" "$total_pages" "$total_size_str"
+    printf "└─"; printf '%.0s─' $(seq 1 $max_name); printf "─┴─"; printf '%.0s─' $(seq 1 8); printf "─┴─"; printf '%.0s─' $(seq 1 10); printf "─┘\n"
+  else
+    # Default style
+    printf "${C_BOLD}%-${max_name}s  %8s  %10s${C_RESET}\n" "Name" "Pages" "Size"
+    printf "${C_DIM}"; printf '%.0s─' $(seq 1 $col_w); printf "${C_RESET}\n"
+
+    for i in "${!file_names[@]}"; do
+      name=$(basename "${file_names[$i]}")
+      if (( ${#name} > max_name )); then
+        name="${name:0:$((max_name - 1))}…"
+      fi
+      size_str=$(format_size "${file_sizes[$i]}")
+      page_display="${file_pages[$i]}"
+      row_color=""
+      for u in "${unreadable_files[@]+"${unreadable_files[@]}"}"; do
+        if [[ "$u" == "${file_names[$i]}" ]]; then
+          page_display="?"
+          row_color="${C_DIM}"
+          break
+        fi
+      done
+      printf "${row_color}%-${max_name}s  %8s  %10s${C_RESET}\n" "$name" "$page_display" "$size_str"
+    done
+
+    printf "${C_DIM}"; printf '%.0s─' $(seq 1 $col_w); printf "${C_RESET}\n"
+    printf "${C_BOLD}%-${max_name}s${C_RESET}  ${C_CYAN}%8d${C_RESET}  ${C_GREEN}%10s${C_RESET}\n" "${doc_count} docs" "$total_pages" "$total_size_str"
+  fi
 fi
 
 # --- Summary ---
 total_size_str=$(format_size "$total_bytes")
-printf "${C_CYAN}%d${C_RESET} pages in ${C_YELLOW}%d${C_RESET} documents, total size ${C_GREEN}%s${C_RESET}\n" \
-  "$total_pages" "$doc_count" "$total_size_str"
+if [[ "$VERBOSE" != true ]]; then
+  printf "${C_CYAN}%d${C_RESET} pages in ${C_YELLOW}%d${C_RESET} documents, total size ${C_GREEN}%s${C_RESET}\n" \
+    "$total_pages" "$doc_count" "$total_size_str"
+fi
 
 # --- Unreadable warnings ---
 if [[ ${#unreadable_files[@]} -gt 0 ]]; then
