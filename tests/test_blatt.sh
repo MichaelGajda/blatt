@@ -130,6 +130,39 @@ echo "Sort error cases:"
 assert_exit_code "--sort with invalid key exits 1" 1 "$BLATT" --sort bogus "$FIXTURES"
 assert_exit_code "--sort without value exits 1" 1 "$BLATT" --sort
 
+# --- Top N ---
+echo "Top N (--top):"
+output=$("$BLATT" -v --sort pages --top 1 "$FIXTURES" 2>&1 | strip_ansi)
+assert_contains "top 1 shows three-pages.pdf" "$output" "three-pages.pdf"
+# Should NOT show one-page.pdf in the table
+if echo "$output" | grep -q "one-page.pdf"; then
+  echo "  FAIL: top 1 should not show one-page.pdf"
+  ((failed++))
+else
+  echo "  PASS: top 1 hides other files"
+  ((passed++))
+fi
+# Summary should still show full totals
+assert_contains "top N keeps full total in summary" "$output" "^4 "
+
+echo "Top N with JSON (--json --top 1):"
+output=$("$BLATT" --json --sort pages --top 1 "$FIXTURES" 2>&1)
+assert_contains "json top 1 has full total_pages" "$output" '"total_pages": 4'
+# JSON files array should have only 1 entry
+file_count=$(echo "$output" | grep -c '"name":')
+if [[ "$file_count" -eq 1 ]]; then
+  echo "  PASS: json top 1 returns only 1 file"
+  ((passed++))
+else
+  echo "  FAIL: json top 1 returned $file_count files instead of 1"
+  ((failed++))
+fi
+
+echo "Top N error cases:"
+assert_exit_code "--top without value exits 1" 1 "$BLATT" --top
+assert_exit_code "--top 0 exits 1" 1 "$BLATT" --top 0 "$FIXTURES"
+assert_exit_code "--top abc exits 1" 1 "$BLATT" --top abc "$FIXTURES"
+
 # --- Unreadable PDF warnings ---
 echo "Unreadable PDF warnings:"
 output=$("$BLATT" "$FIXTURES" 2>&1)

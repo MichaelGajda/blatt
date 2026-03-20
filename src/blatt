@@ -24,6 +24,7 @@ VERBOSE=false
 RECURSIVE=false
 JSON=false
 SORT_BY=""
+TOP_N=0
 TARGET_DIR=""
 
 # --- Usage ---
@@ -31,13 +32,14 @@ usage() {
   cat <<EOF
 blatt v${VERSION} — PDF statistics for a directory
 
-Usage: blatt [-v] [-r] [--json] [--sort KEY] [-h] <directory>
+Usage: blatt [-v] [-r] [--json] [--sort KEY] [--top N] [-h] <directory>
 
 Options:
   -v              Verbose (table with per-file breakdown)
   -r              Recursive (include subdirectories)
   --json          Output as JSON
   --sort KEY      Sort verbose output by: name, pages, size (default: name)
+  --top N         Show only the top N files (use with -v or --json)
   -h              Show this help
 
 Examples:
@@ -46,6 +48,7 @@ Examples:
   blatt -rv ~/Documents
   blatt --json ~/Documents
   blatt -v --sort pages ~/Documents
+  blatt -v --sort size --top 5 ~/Documents
 EOF
   exit 0
 }
@@ -69,6 +72,18 @@ while [[ $# -gt 0 ]]; do
         echo "Error: --sort must be one of: name, pages, size." >&2
         exit 1
       fi
+      shift 2
+      ;;
+    --top)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --top requires a number." >&2
+        exit 1
+      fi
+      if ! [[ "$2" =~ ^[0-9]+$ ]] || [[ "$2" -eq 0 ]]; then
+        echo "Error: --top must be a positive number." >&2
+        exit 1
+      fi
+      TOP_N="$2"
       shift 2
       ;;
     -*)
@@ -204,6 +219,13 @@ if [[ -n "$SORT_BY" && ${#file_names[@]} -gt 0 ]]; then
   file_names=( "${new_names[@]}" )
   file_pages=( "${new_pages[@]}" )
   file_sizes=( "${new_sizes[@]}" )
+fi
+
+# --- Top N (truncate displayed files, keep full totals) ---
+if [[ "$TOP_N" -gt 0 && ${#file_names[@]} -gt 0 ]]; then
+  file_names=( "${file_names[@]:0:$TOP_N}" )
+  file_pages=( "${file_pages[@]:0:$TOP_N}" )
+  file_sizes=( "${file_sizes[@]:0:$TOP_N}" )
 fi
 
 # --- JSON output ---
