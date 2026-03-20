@@ -26,6 +26,8 @@ JSON=false
 SORT_BY=""
 TOP_N=0
 BOX=false
+FANCY=false
+ULTRAFANCY=false
 TARGET_DIR=""
 
 # --- Usage ---
@@ -36,12 +38,14 @@ blatt v${VERSION} — PDF statistics for a directory
 Usage: blatt [-v] [-r] [--json] [--sort KEY] [--top N] [--box] [-h] <directory>
 
 Options:
-  -v              Verbose (table with per-file breakdown)
+  -v              Just the facts
   -r              Recursive (include subdirectories)
   --json          Output as JSON
-  --sort KEY      Sort verbose output by: name, pages, size (default: name)
-  --top N         Show only the top N files (use with -v or --json)
-  --box           Box-drawing table style (use with -v)
+  --sort KEY      Sort by: name, pages, size (default: name)
+  --top N         Show only the top N files
+  --box           With manners
+  --fancy         Dressed to impress
+  --ultrafancy    You asked for this
   -h              Show this help
 
 Examples:
@@ -51,7 +55,9 @@ Examples:
   blatt --json ~/Documents
   blatt -v --sort pages ~/Documents
   blatt -v --sort size --top 5 ~/Documents
-  blatt -v --box ~/Documents
+  blatt --box ~/Documents
+  blatt --fancy ~/Documents
+  blatt --ultrafancy ~/Documents
 EOF
   exit 0
 }
@@ -90,6 +96,8 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --box) BOX=true; VERBOSE=true; shift ;;
+    --fancy) FANCY=true; BOX=true; VERBOSE=true; shift ;;
+    --ultrafancy) ULTRAFANCY=true; FANCY=true; BOX=true; VERBOSE=true; shift ;;
     -*)
       echo "Unknown option: $1" >&2
       echo "Use 'blatt -h' for help." >&2
@@ -178,6 +186,98 @@ format_size() {
   else
     echo "${bytes} B"
   fi
+}
+
+# --- Fancy color helpers ---
+color_for_pages() {
+  local pages=$1
+  if (( pages == 0 )); then echo "${C_DIM}"
+  elif (( pages < 20 )); then echo "${C_GREEN}"
+  elif (( pages < 100 )); then echo "${C_YELLOW}"
+  else echo "${C_WARN}"
+  fi
+}
+
+color_for_bytes() {
+  local bytes=$1
+  if (( bytes < 1048576 )); then echo "${C_GREEN}"        # < 1 MB
+  elif (( bytes < 10485760 )); then echo "${C_YELLOW}"     # < 10 MB
+  else echo "${C_WARN}"                                     # >= 10 MB
+  fi
+}
+
+# --- Sparkline bar ---
+sparkline() {
+  local value=$1 max=$2 width=${3:-10}
+  if (( max == 0 )); then echo ""; return; fi
+  local filled=$(( value * width / max ))
+  (( filled == 0 && value > 0 )) && filled=1
+  local bar=""
+  for (( j=0; j<filled; j++ )); do bar+="█"; done
+  for (( j=filled; j<width; j++ )); do bar+="░"; done
+  echo "$bar"
+}
+
+# --- Ultrafancy helpers ---
+random_signoff() {
+  local phrases=(
+    "Powered by a developer who really needed to count pages"
+    "No trees were counted in the making of this"
+    "Blatt: German for leaf, page, and overkill"
+    "Your PDFs called. They feel measured."
+    "This tool is more extra than your PDF collection"
+    "Sponsored by whoever invented the PDF in 1993"
+    "Fun fact: you just mass-surveilled your own files"
+    "Blatt says: go paperless, but keep the PDFs"
+  )
+  echo "${phrases[$((RANDOM % ${#phrases[@]}))]}"
+}
+
+animated_rainbow() {
+  local text="$1" cycles="${2:-20}"
+  local colors=(196 208 220 46 51 171)  # red orange yellow green cyan purple
+  local num_colors=${#colors[@]}
+  # Hide cursor
+  printf "\033[?25l"
+  for (( frame=0; frame<cycles; frame++ )); do
+    printf "\r  "
+    local ci=0
+    for (( c=0; c<${#text}; c++ )); do
+      local char="${text:$c:1}"
+      if [[ "$char" == " " ]]; then
+        printf " "
+      else
+        local color_idx=$(( (ci + frame) % num_colors ))
+        printf "\033[38;5;%dm%s" "${colors[$color_idx]}" "$char"
+        ((ci++))
+      fi
+    done
+    sleep 0.08
+  done
+  printf "${C_RESET}"
+  # Show cursor
+  printf "\033[?25h"
+}
+
+type_text() {
+  local text="$1" delay="${2:-0.02}"
+  for (( c=0; c<${#text}; c++ )); do
+    printf "%s" "${text:$c:1}"
+    sleep "$delay"
+  done
+}
+
+scanning_animation() {
+  local leaves=("🍂" "🍁" "🍃" "🌿" "🍂")
+  printf "\n"
+  for i in 1 2 3; do
+    for leaf in "${leaves[@]}"; do
+      printf "\r  ${C_DIM}Counting pages...${C_RESET} %s " "$leaf"
+      sleep 0.08
+    done
+  done
+  printf "\r  ${C_GREEN}Done!${C_RESET} Found ${C_CYAN}%d${C_RESET} documents.           \n\n" "$doc_count"
+  sleep 0.3
 }
 
 # --- Sort (applies to verbose and JSON) ---
@@ -271,11 +371,44 @@ if [[ "$VERBOSE" == true ]]; then
   col_w=$((max_name + 8 + 10 + 4))  # name + pages + size + spacing
   total_size_str=$(format_size "$total_bytes")
 
+  # Find max bytes for sparkline scaling
+  max_bytes=0
+  for b in "${file_sizes[@]}"; do
+    (( b > max_bytes )) && max_bytes=$b
+  done
+
   if [[ "$BOX" == true ]]; then
-    # Box-drawing style
-    printf "┌─"; printf '%.0s─' $(seq 1 $max_name); printf "─┬─"; printf '%.0s─' $(seq 1 8); printf "─┬─"; printf '%.0s─' $(seq 1 10); printf "─┐\n"
-    printf "│ ${C_BOLD}%-${max_name}s${C_RESET} │ ${C_BOLD}%8s${C_RESET} │ ${C_BOLD}%10s${C_RESET} │\n" "Name" "Pages" "Size"
-    printf "├─"; printf '%.0s─' $(seq 1 $max_name); printf "─┼─"; printf '%.0s─' $(seq 1 8); printf "─┼─"; printf '%.0s─' $(seq 1 10); printf "─┤\n"
+    # Ultrafancy: scanning animation
+    if [[ "$ULTRAFANCY" == true ]]; then
+      scanning_animation
+    fi
+
+    # Extra column for sparkline in ultrafancy
+    spark_w=12
+    if [[ "$ULTRAFANCY" == true ]]; then
+      printf "┌─"; printf '%.0s─' $(seq 1 $max_name); printf "─┬─"; printf '%.0s─' $(seq 1 8); printf "─┬─"; printf '%.0s─' $(seq 1 10); printf "─┬─"; printf '%.0s─' $(seq 1 $spark_w); printf "─┐\n"
+    else
+      printf "┌─"; printf '%.0s─' $(seq 1 $max_name); printf "─┬─"; printf '%.0s─' $(seq 1 8); printf "─┬─"; printf '%.0s─' $(seq 1 10); printf "─┐\n"
+    fi
+
+    # Header
+    if [[ "$FANCY" == true ]]; then
+      # Header with background color
+      hdr_bg="\033[48;5;236m"
+      if [[ "$ULTRAFANCY" == true ]]; then
+        printf "│ ${hdr_bg}${C_BOLD}%-${max_name}s${C_RESET} │ ${hdr_bg}${C_BOLD}%8s${C_RESET} │ ${hdr_bg}${C_BOLD}%10s${C_RESET} │ ${hdr_bg}${C_BOLD}%-${spark_w}s${C_RESET} │\n" "Name" "Pages" "Size" "Scale"
+      else
+        printf "│ ${hdr_bg}${C_BOLD}%-${max_name}s${C_RESET} │ ${hdr_bg}${C_BOLD}%8s${C_RESET} │ ${hdr_bg}${C_BOLD}%10s${C_RESET} │\n" "Name" "Pages" "Size"
+      fi
+    else
+      printf "│ ${C_BOLD}%-${max_name}s${C_RESET} │ ${C_BOLD}%8s${C_RESET} │ ${C_BOLD}%10s${C_RESET} │\n" "Name" "Pages" "Size"
+    fi
+
+    if [[ "$ULTRAFANCY" == true ]]; then
+      printf "├─"; printf '%.0s─' $(seq 1 $max_name); printf "─┼─"; printf '%.0s─' $(seq 1 8); printf "─┼─"; printf '%.0s─' $(seq 1 10); printf "─┼─"; printf '%.0s─' $(seq 1 $spark_w); printf "─┤\n"
+    else
+      printf "├─"; printf '%.0s─' $(seq 1 $max_name); printf "─┼─"; printf '%.0s─' $(seq 1 8); printf "─┼─"; printf '%.0s─' $(seq 1 10); printf "─┤\n"
+    fi
 
     for i in "${!file_names[@]}"; do
       name=$(basename "${file_names[$i]}")
@@ -284,20 +417,60 @@ if [[ "$VERBOSE" == true ]]; then
       fi
       size_str=$(format_size "${file_sizes[$i]}")
       page_display="${file_pages[$i]}"
-      row_color=""
+
+      # Determine colors
+      is_unreadable=false
       for u in "${unreadable_files[@]+"${unreadable_files[@]}"}"; do
-        if [[ "$u" == "${file_names[$i]}" ]]; then
-          page_display="?"
-          row_color="${C_DIM}"
-          break
-        fi
+        [[ "$u" == "${file_names[$i]}" ]] && is_unreadable=true && break
       done
-      printf "│ ${row_color}%-${max_name}s${C_RESET} │ ${row_color}%8s${C_RESET} │ ${row_color}%10s${C_RESET} │\n" "$name" "$page_display" "$size_str"
+
+      if [[ "$is_unreadable" == true ]]; then
+        page_display="?"
+        pc="${C_DIM}"; sc="${C_DIM}"; nc="${C_DIM}"
+      elif [[ "$FANCY" == true ]]; then
+        pc=$(color_for_pages "${file_pages[$i]}")
+        sc=$(color_for_bytes "${file_sizes[$i]}")
+        nc=""
+        # Alternating row dim
+        if (( i % 2 == 1 )); then nc="\033[48;5;234m"; fi
+      else
+        pc=""; sc=""; nc=""
+      fi
+
+      if [[ "$ULTRAFANCY" == true ]]; then
+        bar=$(sparkline "${file_sizes[$i]}" "$max_bytes" "$spark_w")
+        row_str=""
+        row_str=$(printf "│ ${nc}%-${max_name}s${C_RESET} │ ${nc}${pc}%8s${C_RESET} │ ${nc}${sc}%10s${C_RESET} │ ${C_DIM}%-${spark_w}s${C_RESET} │" "$name" "$page_display" "$size_str" "$bar")
+        type_text "$row_str" 0.005
+        printf "\n"
+        sleep 0.05
+      else
+        printf "│ ${nc}%-${max_name}s${C_RESET} │ ${nc}${pc}%8s${C_RESET} │ ${nc}${sc}%10s${C_RESET} │\n" "$name" "$page_display" "$size_str"
+      fi
     done
 
-    printf "├─"; printf '%.0s─' $(seq 1 $max_name); printf "─┼─"; printf '%.0s─' $(seq 1 8); printf "─┼─"; printf '%.0s─' $(seq 1 10); printf "─┤\n"
-    printf "│ ${C_BOLD}%-${max_name}s${C_RESET} │ ${C_CYAN}%8d${C_RESET} │ ${C_GREEN}%10s${C_RESET} │\n" "${doc_count} docs" "$total_pages" "$total_size_str"
-    printf "└─"; printf '%.0s─' $(seq 1 $max_name); printf "─┴─"; printf '%.0s─' $(seq 1 8); printf "─┴─"; printf '%.0s─' $(seq 1 10); printf "─┘\n"
+    # Totals separator
+    if [[ "$ULTRAFANCY" == true ]]; then
+      printf "├─"; printf '%.0s─' $(seq 1 $max_name); printf "─┼─"; printf '%.0s─' $(seq 1 8); printf "─┼─"; printf '%.0s─' $(seq 1 10); printf "─┼─"; printf '%.0s─' $(seq 1 $spark_w); printf "─┤\n"
+      # ツ is double-width, so manually pad to align the box border
+      shrug="¯\_(ツ)_/¯"
+      pad=$((spark_w - 10))  # 10 = display width of shrug (9 chars + 1 extra for wide ツ)
+      shrug_padded="${shrug}$(printf '%*s' "$pad" "")"
+      printf "│ ${C_BOLD}%-${max_name}s${C_RESET} │ ${C_CYAN}%8d${C_RESET} │ ${C_GREEN}%10s${C_RESET} │ %s │\n" "${doc_count} docs" "$total_pages" "$total_size_str" "$shrug_padded"
+      printf "└─"; printf '%.0s─' $(seq 1 $max_name); printf "─┴─"; printf '%.0s─' $(seq 1 8); printf "─┴─"; printf '%.0s─' $(seq 1 10); printf "─┴─"; printf '%.0s─' $(seq 1 $spark_w); printf "─┘\n"
+    else
+      printf "├─"; printf '%.0s─' $(seq 1 $max_name); printf "─┼─"; printf '%.0s─' $(seq 1 8); printf "─┼─"; printf '%.0s─' $(seq 1 10); printf "─┤\n"
+      printf "│ ${C_BOLD}%-${max_name}s${C_RESET} │ ${C_CYAN}%8d${C_RESET} │ ${C_GREEN}%10s${C_RESET} │\n" "${doc_count} docs" "$total_pages" "$total_size_str"
+      printf "└─"; printf '%.0s─' $(seq 1 $max_name); printf "─┴─"; printf '%.0s─' $(seq 1 8); printf "─┴─"; printf '%.0s─' $(seq 1 10); printf "─┘\n"
+    fi
+
+    # Ultrafancy sign-off
+    if [[ "$ULTRAFANCY" == true ]]; then
+      signoff=$(random_signoff)
+      printf "\n"
+      animated_rainbow "$signoff" 24
+      printf "\n"
+    fi
   else
     # Default style
     printf "${C_BOLD}%-${max_name}s  %8s  %10s${C_RESET}\n" "Name" "Pages" "Size"
@@ -333,10 +506,32 @@ if [[ "$VERBOSE" != true ]]; then
     "$total_pages" "$doc_count" "$total_size_str"
 fi
 
-# --- Unreadable warnings ---
+# --- Unreadable notes ---
 if [[ ${#unreadable_files[@]} -gt 0 ]]; then
-  printf "\n${C_WARN}Warning:${C_RESET} %d file(s) with unknown page count (not indexed or password-protected):\n" "${#unreadable_files[@]}"
+  unreadable_names=()
   for f in "${unreadable_files[@]}"; do
-    printf "  ${C_DIM}%s${C_RESET}\n" "$(basename "$f")"
+    unreadable_names+=( "$(basename "$f")" )
   done
+  joined=$(IFS=", "; echo "${unreadable_names[*]}")
+
+  if [[ "$ULTRAFANCY" == true ]]; then
+    amber="\033[38;5;214m"
+    printf "\n  👀 ${amber}Psst — %d file(s) being mysterious about their page count${C_RESET}\n" "${#unreadable_files[@]}"
+    printf "  ${C_DIM}   (not indexed or password-protected)${C_RESET}\n"
+    for name in "${unreadable_names[@]}"; do
+      printf "  ${C_DIM}   → %s${C_RESET}\n" "$name"
+    done
+  elif [[ "$FANCY" == true ]]; then
+    printf "\n  ${C_DIM}ℹ %d file(s) with unknown page count${C_RESET}\n" "${#unreadable_files[@]}"
+    printf "  ${C_DIM}  (not indexed or password-protected)${C_RESET}\n"
+    for name in "${unreadable_names[@]}"; do
+      printf "  ${C_DIM}  → %s${C_RESET}\n" "$name"
+    done
+  else
+    printf "\n  ${C_DIM}ℹ %d file(s) with unknown page count${C_RESET}\n" "${#unreadable_files[@]}"
+    printf "  ${C_DIM}  (not indexed or password-protected)${C_RESET}\n"
+    for name in "${unreadable_names[@]}"; do
+      printf "  ${C_DIM}  → %s${C_RESET}\n" "$name"
+    done
+  fi
 fi

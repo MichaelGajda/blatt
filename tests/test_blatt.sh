@@ -173,10 +173,22 @@ assert_contains "box has column separators" "$output" "│"
 assert_contains "box shows files (implies -v)" "$output" "one-page.pdf"
 assert_contains "box shows totals row" "$output" "3 docs"
 
+# --- Fancy mode ---
+echo "Fancy mode (--fancy):"
+output=$("$BLATT" --fancy "$FIXTURES" 2>&1 | strip_ansi)
+assert_contains "fancy implies box" "$output" "┌─"
+assert_contains "fancy implies verbose" "$output" "one-page.pdf"
+assert_contains "fancy shows totals" "$output" "3 docs"
+
+echo "Ultrafancy mode (--ultrafancy):"
+output=$("$BLATT" --ultrafancy "$FIXTURES" 2>&1 | strip_ansi)
+assert_contains "ultrafancy has sparkline column" "$output" "█"
+assert_contains "ultrafancy has sparkline header" "$output" "Scale"
+
 # --- Unreadable PDF warnings ---
-echo "Unreadable PDF warnings:"
-output=$("$BLATT" "$FIXTURES" 2>&1)
-assert_contains "warns about unreadable files" "$output" "unknown page count"
+echo "Unreadable PDF notes:"
+output=$("$BLATT" "$FIXTURES" 2>&1 | strip_ansi)
+assert_contains "notes unreadable files" "$output" "unknown page count"
 assert_contains "lists fake.pdf as unreadable" "$output" "fake.pdf"
 
 echo "Unreadable in verbose mode (-v):"
