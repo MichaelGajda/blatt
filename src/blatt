@@ -188,6 +188,22 @@ format_size() {
   fi
 }
 
+# --- Display width helper (handles combining characters from macOS NFD) ---
+display_width() {
+  # Convert NFD (macOS) to NFC, then count characters for true display width
+  printf '%s' "$1" | iconv -f utf-8-mac -t utf-8 | wc -m | tr -d ' '
+}
+
+# --- Manual padding (printf %-Ns can't handle combining chars correctly) ---
+pad_right() {
+  local str="$1" target_width="$2"
+  local dw
+  dw=$(display_width "$str")
+  local spaces=$(( target_width - dw ))
+  printf '%s' "$str"
+  if [[ "$spaces" -gt 0 ]]; then printf "%${spaces}s" ""; fi
+}
+
 # --- Fancy color helpers ---
 color_for_pages() {
   local pages=$1
@@ -261,10 +277,11 @@ animated_rainbow() {
 
 type_text() {
   local text="$1" delay="${2:-0.02}"
-  for (( c=0; c<${#text}; c++ )); do
-    printf "%s" "${text:$c:1}"
+  local i=0 char
+  while IFS= read -r -n1 char; do
+    printf "%s" "$char"
     sleep "$delay"
-  done
+  done <<< "$text"
 }
 
 scanning_animation() {
@@ -360,11 +377,12 @@ fi
 
 # --- Verbose table output ---
 if [[ "$VERBOSE" == true ]]; then
-  # Calculate column widths
+  # Calculate column widths (use display width to handle combining chars)
   max_name=5  # "Total"
   for file in "${file_names[@]}"; do
     name=$(basename "$file")
-    (( ${#name} > max_name )) && max_name=${#name}
+    dw=$(display_width "$name")
+    (( dw > max_name )) && max_name=$dw
   done
   # Cap name width
   (( max_name > 60 )) && max_name=60
@@ -438,15 +456,18 @@ if [[ "$VERBOSE" == true ]]; then
         pc=""; sc=""; nc=""
       fi
 
+      padded_name=$(pad_right "$name" "$max_name")
+      padded_pages=$(printf "%8s" "$page_display")
+      padded_size=$(printf "%10s" "$size_str")
       if [[ "$ULTRAFANCY" == true ]]; then
         bar=$(sparkline "${file_sizes[$i]}" "$max_bytes" "$spark_w")
         row_str=""
-        row_str=$(printf "│ ${nc}%-${max_name}s${C_RESET} │ ${nc}${pc}%8s${C_RESET} │ ${nc}${sc}%10s${C_RESET} │ ${C_DIM}%-${spark_w}s${C_RESET} │" "$name" "$page_display" "$size_str" "$bar")
+        row_str=$(printf "│ ${nc}%s${C_RESET} │ ${nc}${pc}%s${C_RESET} │ ${nc}${sc}%s${C_RESET} │ ${C_DIM}%-${spark_w}s${C_RESET} │" "$padded_name" "$padded_pages" "$padded_size" "$bar")
         type_text "$row_str" 0.005
         printf "\n"
         sleep 0.05
       else
-        printf "│ ${nc}%-${max_name}s${C_RESET} │ ${nc}${pc}%8s${C_RESET} │ ${nc}${sc}%10s${C_RESET} │\n" "$name" "$page_display" "$size_str"
+        printf "│ ${nc}%s${C_RESET} │ ${nc}${pc}%s${C_RESET} │ ${nc}${sc}%s${C_RESET} │\n" "$padded_name" "$padded_pages" "$padded_size"
       fi
     done
 
@@ -492,7 +513,8 @@ if [[ "$VERBOSE" == true ]]; then
           break
         fi
       done
-      printf "${row_color}%-${max_name}s  %8s  %10s${C_RESET}\n" "$name" "$page_display" "$size_str"
+      padded_name=$(pad_right "$name" "$max_name")
+      printf "${row_color}%s  %8s  %10s${C_RESET}\n" "$padded_name" "$page_display" "$size_str"
     done
 
     printf "${C_DIM}"; printf '%.0s─' $(seq 1 $col_w); printf "${C_RESET}\n"
