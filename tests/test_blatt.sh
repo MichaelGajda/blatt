@@ -49,7 +49,7 @@ assert_exit_code() {
 echo "Summary mode (fixtures/):"
 output=$("$BLATT" "$FIXTURES" 2>&1)
 assert_contains "page count is 4" "$output" "^4 "
-assert_contains "document count is 2" "$output" " 2 "
+assert_contains "document count is 3" "$output" " 3 "
 
 # --- Verbose mode ---
 echo "Verbose mode (-v):"
@@ -62,7 +62,7 @@ assert_contains "shows header" "$output" "Pages"
 echo "Recursive mode (-r):"
 output=$("$BLATT" -r "$FIXTURES" 2>&1)
 assert_contains "page count is 9 (1+3+5)" "$output" "^9 "
-assert_contains "document count is 3" "$output" " 3 "
+assert_contains "document count is 4" "$output" " 4 "
 
 # --- Combined -rv ---
 echo "Combined mode (-rv):"
@@ -90,14 +90,14 @@ assert_exit_code "unknown flag exits 1" 1 "$BLATT" "-z"
 echo "JSON mode (--json):"
 output=$("$BLATT" --json "$FIXTURES" 2>&1)
 assert_contains "json has total_pages" "$output" '"total_pages": 4'
-assert_contains "json has total_documents" "$output" '"total_documents": 2'
+assert_contains "json has total_documents" "$output" '"total_documents": 3'
 assert_contains "json has files array" "$output" '"files":'
 assert_contains "json lists one-page.pdf" "$output" '"name": "one-page.pdf"'
 
 echo "JSON recursive (--json -r):"
 output=$("$BLATT" --json -r "$FIXTURES" 2>&1)
 assert_contains "json recursive total_pages 9" "$output" '"total_pages": 9'
-assert_contains "json recursive total_documents 3" "$output" '"total_documents": 3'
+assert_contains "json recursive total_documents 4" "$output" '"total_documents": 4'
 
 # --- Sort mode ---
 echo "Sort by name (-v --sort name):"
@@ -129,6 +129,21 @@ fi
 echo "Sort error cases:"
 assert_exit_code "--sort with invalid key exits 1" 1 "$BLATT" --sort bogus "$FIXTURES"
 assert_exit_code "--sort without value exits 1" 1 "$BLATT" --sort
+
+# --- Unreadable PDF warnings ---
+echo "Unreadable PDF warnings:"
+output=$("$BLATT" "$FIXTURES" 2>&1)
+assert_contains "warns about unreadable files" "$output" "unknown page count"
+assert_contains "lists fake.pdf as unreadable" "$output" "fake.pdf"
+
+echo "Unreadable in verbose mode (-v):"
+output=$("$BLATT" -v "$FIXTURES" 2>&1 | strip_ansi)
+assert_contains "shows ? for unreadable pages" "$output" "fake.pdf.*?"
+
+echo "Unreadable in JSON (--json):"
+output=$("$BLATT" --json "$FIXTURES" 2>&1)
+assert_contains "json marks fake.pdf unreadable" "$output" '"unreadable": true'
+assert_contains "json has unreadable_count" "$output" '"unreadable_count": 1'
 
 # --- No PDFs ---
 echo "Empty directory:"
