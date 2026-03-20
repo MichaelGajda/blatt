@@ -4,7 +4,7 @@ set -euo pipefail
 # blatt — PDF statistics for macOS
 # Usage: blatt [-v] [-r] <directory>
 
-VERSION="0.1.0"
+VERSION="1.3.0"
 
 # --- Colors (disabled when not a TTY) ---
 if [[ -t 1 ]]; then
@@ -335,6 +335,7 @@ fi
 # --- JSON output ---
 if [[ "$JSON" == true ]]; then
   echo "{"
+  echo "  \"version\": \"${VERSION}\","
   echo "  \"directory\": \"${TARGET_DIR}\","
   echo "  \"recursive\": ${RECURSIVE},"
   echo "  \"total_pages\": ${total_pages},"
